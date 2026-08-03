@@ -16,6 +16,7 @@ import java.net.http.HttpResponse;
 import java.net.http.WebSocket;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -47,7 +48,7 @@ class ResilientClient extends HttpClient {
 
     static <T> CompletableFuture<HttpResponse<T>> handleConnectTimeout(Function<HttpClient, CompletableFuture<HttpResponse<T>>> send, RoundRobinPool roundRobinPool) {
         final SingleIpHttpClient firstClient = singleIpHttpClient(roundRobinPool);
-        return handleConnectTimeout(send, roundRobinPool, firstClient, new ArrayList<>());
+        return handleConnectTimeout(send, roundRobinPool, firstClient, new LinkedHashSet<>());
 
     }
 
@@ -96,11 +97,12 @@ class ResilientClient extends HttpClient {
             Function<HttpClient, CompletableFuture<HttpResponse<T>>> send,
             RoundRobinPool roundRobinPool,
             SingleIpHttpClient firstClient,
-            List<InetAddress> triedAddress
+            Set<InetAddress> triedAddress
     ) {
         final boolean everyHealthyClientTried = roundRobinPool.getList().stream()
                 .filter(SingleIpHttpClient::isHealthy)
-                .allMatch(singleIpHttpClient -> triedAddress.contains(singleIpHttpClient.getInetAddress()));
+                .map(SingleIpHttpClient::getInetAddress)
+                .allMatch(triedAddress::contains);
         if (everyHealthyClientTried) {
             final CompletableFuture<HttpResponse<T>> httpResponseCompletableFuture = new CompletableFuture<>();
             httpResponseCompletableFuture.completeExceptionally(new HttpConnectTimeoutException("Cannot connect to the server, the following address were tried without success " + triedAddress + "."));
@@ -122,7 +124,7 @@ class ResilientClient extends HttpClient {
     private static <T> ClientWithResponseFuture<T> addExceptionHandlerFuture(final Function<HttpClient, CompletableFuture<HttpResponse<T>>> send,
                                                                              final RoundRobinPool roundRobinPool,
                                                                              final SingleIpHttpClient firstClient,
-                                                                             final List<InetAddress> triedAddress,
+                                                                             final Set<InetAddress> triedAddress,
                                                                              final ClientWithResponseFuture<T> clientWithResponseFuture) {
 
         final CompletableFuture<HttpResponse<T>> httpResponseCompletableFuture = clientWithResponseFuture.httpResponseFuture
@@ -152,7 +154,7 @@ class ResilientClient extends HttpClient {
     }
 
     private static boolean wasDisposedWhileHandedOut(final Throwable throwable, final SingleIpHttpClient singleIpHttpClient) {
-        return singleIpHttpClient.isClosed()
+        return singleIpHttpClient.isClosing()
                 && (throwable instanceof IOException || throwable.getCause() instanceof IOException);
     }
 

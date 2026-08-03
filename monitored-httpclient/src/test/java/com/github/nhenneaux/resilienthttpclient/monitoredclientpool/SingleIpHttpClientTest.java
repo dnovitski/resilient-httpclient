@@ -79,7 +79,7 @@ class SingleIpHttpClientTest {
         // When
         singleIpHttpClient.close();
         // Then
-        assertTrue(singleIpHttpClient.isClosed());
+        assertTrue(singleIpHttpClient.isClosing());
         assertFalse(singleIpHttpClient.isHealthy(), "the round robin must not hand out a closed client");
     }
 
